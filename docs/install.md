@@ -2,11 +2,13 @@
 
 kcd1db supports the Windows x64 Steam build of Kingdom Come: Deliverance `1.9.8-404-504czj4` (BuildID `22623230`).
 
-1. Close the game and extract `kcd1db.asi` from `kcd1db.zip` into `Bin/Win64`, next to `KingdomCome.exe`.
-2. If `Bin/Win64` has no ASI loader, extract `dinput8.dll` from the x64 Ultimate ASI Loader archive into the same directory. Keep your existing loader if you already use one. [Ultimate ASI Loader](https://github.com/ThirteenAG/Ultimate-ASI-Loader/releases)
+1. Close the game and open `KingdomComeDeliverance/Bin/Win64`, the folder containing `KingdomCome.exe`.
+2. Extract both files from `kcd1db.zip` into that folder. If it already contains `dinput8.dll`, keep the existing loader and extract `kcd1db.asi`.
 3. Launch the game through Steam. Check `kcd1db.log` in the game root for `LuaDB and DB registered` from the current launch.
 
 To update, close the game and replace `kcd1db.asi`. To uninstall, close the game and remove `kcd1db.asi`. Keep `kcd1db.db` in the game root if you want to retain your Lua mods' data.
+
+The ZIP bundles [Ultimate ASI Loader for Windows x64](https://github.com/ThirteenAG/Ultimate-ASI-Loader). License notices for the distributed binaries are available as `kcd1db-licenses.txt` with the [GitHub Releases](https://github.com/muyuanjin/kcd1db/releases).
 
 ## Troubleshooting
 

@@ -4,7 +4,7 @@ LuaDB for Kingdom Come: Deliverance. It provides SQLite storage for Lua mods wit
 
 ## Install
 
-Use the Windows x64 Steam build `1.9.8-404-504czj4` (Steam BuildID `22623230`). Put `kcd1db.asi` and the x64 Ultimate ASI Loader `dinput8.dll` next to `KingdomCome.exe` in `Bin/Win64`. Reuse the loader if it is already installed. Launch the game through Steam. [Install and troubleshoot](docs/install.md)
+Use the Windows x64 Steam build `1.9.8-404-504czj4` (Steam BuildID `22623230`). Download `kcd1db.zip` and extract both files next to `KingdomCome.exe` in `Bin/Win64`. If that folder already contains `dinput8.dll`, keep it and extract `kcd1db.asi`. Launch the game through Steam. [Install and troubleshoot](docs/install.md)
 
 The game root holds `kcd1db.db` and `kcd1db.log`. A successful startup logs `LuaDB and DB registered`.
 
@@ -37,7 +37,7 @@ cmake --build build --config Release
 
 The plugin is built at `build/Release/kcd1db.asi`.
 
-GitHub Actions builds checked-in code and packages `kcd1db.zip` and `kcd1db_fake_db.lua`. A `v*.*.*` tag publishes those files to GitHub Releases. [Build and release workflow](.github/workflows/build.yml)
+Run `pwsh -File scripts/package-release.ps1` after a Release build. The main ZIP contains `kcd1db.asi` and the bundled x64 Ultimate ASI Loader `dinput8.dll`. GitHub Actions publishes the ZIP, `kcd1db_fake_db.lua`, and `kcd1db-licenses.txt` when a `v*.*.*` tag is pushed. [Build and release workflow](.github/workflows/build.yml)
 
 ## Compatibility
 

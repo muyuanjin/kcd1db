@@ -49,6 +49,7 @@ jobs:
           files: |
             release/kcd1db.zip
             release/kcd1db_fake_db.lua
+            release/kcd1db-licenses.txt
           fail_on_unmatched_files: true
           generate_release_notes: true
           prerelease: ${{ contains(github.ref_name, '-') }}
