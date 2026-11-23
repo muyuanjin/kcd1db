@@ -23,4 +23,4 @@ gh workflow run publish-nexusmods.yml --repo muyuanjin/kcd1db `
   -f tag=v1.2.3 -f 'file_id=<稳定文件 ID>'
 ```
 
-工作流从标签读取文件说明，并从标签推导 Nexus 版本号。上传成功后，用公开 Files 页验收版本、说明和下载。
+工作流从标签读取超过 255 字符的文件说明，并从标签推导 Nexus 版本号。修正已有 GitHub Release 的文件时，用可选 `description` 输入提供更新后的说明。将旧文件下架时启用 `archive_existing_version`。上传成功后，用公开 Files 页验收版本、说明和下载。

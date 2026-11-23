@@ -12,6 +12,14 @@ on:
         description: Stable Nexus v3 file ID for the kcd1db main file
         required: true
         type: string
+      description:
+        description: File description override for an existing GitHub release
+        required: false
+        type: string
+      archive_existing_version:
+        description: Archive the previous Nexus file version after upload
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -36,6 +44,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ inputs.tag }}
+          FILE_DESCRIPTION: ${{ inputs.description }}
           REPOSITORY_IS_PRIVATE: ${{ github.event.repository.private }}
         run: |
           set -euo pipefail
@@ -44,12 +53,19 @@ jobs:
             exit 1
           fi
           version="${RELEASE_TAG#v}"
-          notes="docs/nexusmods/files/$version.txt"
-          if [[ ! -s "$notes" ]]; then
-            echo "Missing file description in release tag: $notes" >&2
+          description="$FILE_DESCRIPTION"
+          if [[ -z "$description" ]]; then
+            notes="docs/nexusmods/files/$version.txt"
+            if [[ ! -s "$notes" ]]; then
+              echo "Missing file description in release tag: $notes" >&2
+              exit 1
+            fi
+            description="$(cat "$notes")"
+          fi
+          if (( ${#description} <= 255 )); then
+            echo "The Nexus file description must exceed 255 characters." >&2
             exit 1
           fi
-          description="$(cat "$notes")"
           gh release view "$RELEASE_TAG" --json isDraft,isPrerelease --jq '(.isDraft or .isPrerelease) | not' | grep -qx true
           gh release download "$RELEASE_TAG" --pattern "$ASSET_NAME" --dir nexus-upload
           test -s "nexus-upload/$ASSET_NAME"
@@ -69,7 +85,7 @@ jobs:
           version: ${{ steps.prepare.outputs.version }}
           description: ${{ steps.prepare.outputs.description }}
           category: main
-          archive_existing_version: false
+          archive_existing_version: ${{ inputs.archive_existing_version }}
           allow_mod_manager_download: false
           primary_mod_manager_download: false
       - name: Record uploaded version ID
