@@ -1,0 +1,4 @@
+interface:
+  display_name: "kcd1db Nexus Publishing"
+  short_description: "Prepare and verify kcd1db releases on Nexus Mods"
+  default_prompt: "使用 $kcd1-nexus-publishing 准备 kcd1db 的 Nexus Mods 发布。"

@@ -23,14 +23,7 @@ jobs:
 
       - name: Package release files
         shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Path build/package, build/release-assets
-          Copy-Item -LiteralPath build/Release/kcd1db.asi, LICENSE -Destination build/package
-          Copy-Item -LiteralPath docs/install.md -Destination build/package/INSTALL.md
-          Copy-Item -LiteralPath build/_deps/sqlitecpp-src/LICENSE.txt -Destination build/package/SQLiteCpp-LICENSE.txt
-          Copy-Item -LiteralPath build/_deps/minhook-src/LICENSE.txt -Destination build/package/MinHook-LICENSE.txt
-          Compress-Archive -Path build/package/* -DestinationPath build/release-assets/kcd1db.zip
-          Copy-Item -LiteralPath dist/kcd1db_fake_db.lua -Destination build/release-assets
+        run: ./scripts/package-release.ps1
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4

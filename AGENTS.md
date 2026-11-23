@@ -28,3 +28,7 @@ Use the [manual test guide](docs/manual-testing.md) for changes to save snapshot
 ## Commits and Pull Requests
 
 Use short, imperative commit subjects such as `Fix save-local snapshot loading`. In the pull request, describe the affected behavior, link any related issue, and include the game build and manual checks performed for runtime changes.
+
+## Nexus Mods Publishing
+
+Use the [kcd1db Nexus publishing skill](.agents/skills/kcd1-nexus-publishing/SKILL.md) for first releases, file updates, upload configuration, and mod page maintenance.

@@ -1,0 +1,79 @@
+name: Publish to Nexus Mods
+run-name: Nexus Mods ${{ inputs.tag }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Public GitHub release tag (vMAJOR.MINOR.PATCH)
+        required: true
+        type: string
+      file_id:
+        description: Stable Nexus v3 file ID for the kcd1db main file
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nexus-${{ inputs.file_id }}
+  cancel-in-progress: false
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    env:
+      ASSET_NAME: kcd1db.zip
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ inputs.tag }}
+      - name: Read tagged notes and download the public release asset
+        id: prepare
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          REPOSITORY_IS_PRIVATE: ${{ github.event.repository.private }}
+        run: |
+          set -euo pipefail
+          if [[ "$REPOSITORY_IS_PRIVATE" != false || ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Use a version tag from a public repository." >&2
+            exit 1
+          fi
+          version="${RELEASE_TAG#v}"
+          notes="docs/nexusmods/files/$version.txt"
+          if [[ ! -s "$notes" ]]; then
+            echo "Missing file description in release tag: $notes" >&2
+            exit 1
+          fi
+          description="$(cat "$notes")"
+          gh release view "$RELEASE_TAG" --json isDraft,isPrerelease --jq '(.isDraft or .isPrerelease) | not' | grep -qx true
+          gh release download "$RELEASE_TAG" --pattern "$ASSET_NAME" --dir nexus-upload
+          test -s "nexus-upload/$ASSET_NAME"
+          delimiter="nexus_notes_$(uuidgen)"
+          {
+            printf 'version=%s\n' "$version"
+            printf 'description<<%s\n%s\n%s\n' "$delimiter" "$description" "$delimiter"
+          } >> "$GITHUB_OUTPUT"
+      - name: Upload a new version of the existing main file
+        id: upload
+        uses: Nexus-Mods/upload-action@v1.0.0-beta.8
+        with:
+          api_key: ${{ secrets.NEXUSMODS_API_KEY }}
+          file_id: ${{ inputs.file_id }}
+          filename: nexus-upload/${{ env.ASSET_NAME }}
+          display_name: kcd1db
+          version: ${{ steps.prepare.outputs.version }}
+          description: ${{ steps.prepare.outputs.description }}
+          category: main
+          archive_existing_version: false
+          allow_mod_manager_download: false
+          primary_mod_manager_download: false
+      - name: Record uploaded version ID
+        env:
+          VERSION_ID: ${{ steps.upload.outputs.version_id }}
+        run: |
+          printf 'Nexus uploaded version ID: %s\n' "$VERSION_ID" >> "$GITHUB_STEP_SUMMARY"
