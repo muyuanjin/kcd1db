@@ -1,0 +1,61 @@
+name: Build and release
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+    tags: ['v*.*.*']
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64
+
+      - name: Build
+        run: cmake --build build --config Release
+
+      - name: Package release files
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path build/package, build/release-assets
+          Copy-Item -LiteralPath build/Release/kcd1db.asi, LICENSE -Destination build/package
+          Copy-Item -LiteralPath docs/install.md -Destination build/package/INSTALL.md
+          Copy-Item -LiteralPath build/_deps/sqlitecpp-src/LICENSE.txt -Destination build/package/SQLiteCpp-LICENSE.txt
+          Copy-Item -LiteralPath build/_deps/minhook-src/LICENSE.txt -Destination build/package/MinHook-LICENSE.txt
+          Compress-Archive -Path build/package/* -DestinationPath build/release-assets/kcd1db.zip
+          Copy-Item -LiteralPath dist/kcd1db_fake_db.lua -Destination build/release-assets
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: kcd1db-windows-x64
+          path: build/release-assets/
+          if-no-files-found: error
+
+  release:
+    if: github.ref_type == 'tag'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: kcd1db-windows-x64
+          path: release
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release/kcd1db.zip
+            release/kcd1db_fake_db.lua
+          fail_on_unmatched_files: true
+          generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-') }}

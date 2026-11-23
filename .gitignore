@@ -1,0 +1,8 @@
+/build*/
+/.vs/
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+*.log
+__pycache__/
