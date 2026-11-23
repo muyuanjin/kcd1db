@@ -62,8 +62,8 @@ jobs:
             fi
             description="$(cat "$notes")"
           fi
-          if (( ${#description} <= 255 )); then
-            echo "The Nexus file description must exceed 255 characters." >&2
+          if (( ${#description} > 255 )); then
+            echo "Nexus Mods limits file descriptions to 255 characters." >&2
             exit 1
           fi
           gh release view "$RELEASE_TAG" --json isDraft,isPrerelease --jq '(.isDraft or .isPrerelease) | not' | grep -qx true
