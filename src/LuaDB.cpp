@@ -2,6 +2,7 @@
 
 #include <charconv>
 #include <stdexcept>
+#include <utility>
 
 namespace
 {
@@ -45,15 +46,15 @@ LuaDB::LuaDB(const std::string& path)
 void LuaDB::Set(bool global, std::string key, Value value)
 {
     std::lock_guard lock(m_mutex);
-    auto& cache = global ? m_globalCache : m_saveCache;
+    auto& cache = GetCache(global);
     cache.insert_or_assign(std::move(key), std::move(value));
     m_globalDirty |= global;
 }
 
-std::optional<LuaDB::Value> LuaDB::Get(bool global, const std::string& key) const
+std::optional<LuaDB::Value> LuaDB::Get(bool global, const std::string& key)
 {
     std::lock_guard lock(m_mutex);
-    const auto& cache = global ? m_globalCache : m_saveCache;
+    const auto& cache = GetCache(global);
     const auto found = cache.find(key);
     if (found == cache.end())
         return std::nullopt;
@@ -63,16 +64,16 @@ std::optional<LuaDB::Value> LuaDB::Get(bool global, const std::string& key) cons
 bool LuaDB::Del(bool global, const std::string& key)
 {
     std::lock_guard lock(m_mutex);
-    auto& cache = global ? m_globalCache : m_saveCache;
+    auto& cache = GetCache(global);
     const bool removed = cache.erase(key) != 0;
     m_globalDirty |= global && removed;
     return removed;
 }
 
-LuaDB::Cache LuaDB::All(bool global) const
+LuaDB::Cache LuaDB::All(bool global)
 {
     std::lock_guard lock(m_mutex);
-    return global ? m_globalCache : m_saveCache;
+    return GetCache(global);
 }
 
 void LuaDB::Save(const std::string& version, const Cache& snapshot)
@@ -81,13 +82,31 @@ void LuaDB::Save(const std::string& version, const Cache& snapshot)
     WriteSnapshot(version, snapshot);
 }
 
-std::size_t LuaDB::Load(const std::string& version)
+void LuaDB::DiscardSnapshot(const std::string& version)
 {
     std::lock_guard lock(m_mutex);
+    DeleteSnapshot(version);
+}
+
+std::size_t LuaDB::Load(std::string version)
+{
+    std::lock_guard lock(m_mutex);
+    m_pendingVersion = std::move(version);
     m_saveCache.clear();
-    if (!version.empty())
-        m_saveCache = ReadSnapshot(version);
-    return m_saveCache.size();
+    return GetCache(false).size();
+}
+
+LuaDB::Cache& LuaDB::GetCache(bool global)
+{
+    if (global)
+        return m_globalCache;
+
+    if (!m_pendingVersion.empty())
+    {
+        m_saveCache = ReadSnapshot(m_pendingVersion);
+        m_pendingVersion.clear();
+    }
+    return m_saveCache;
 }
 
 void LuaDB::FlushGlobals(bool force)
@@ -135,9 +154,7 @@ LuaDB::Cache LuaDB::ReadSnapshot(const std::string& file)
 void LuaDB::WriteSnapshot(const std::string& file, const Cache& cache)
 {
     SQLite::Transaction transaction(m_db);
-    SQLite::Statement remove(m_db, "DELETE FROM Store WHERE savefile = ?");
-    remove.bind(1, file);
-    remove.exec();
+    DeleteSnapshot(file);
 
     SQLite::Statement insert(m_db, "INSERT INTO Store (key, savefile, type, value) VALUES (?, ?, ?, ?)");
     insert.bind(2, file);
@@ -151,4 +168,11 @@ void LuaDB::WriteSnapshot(const std::string& file, const Cache& cache)
         insert.reset();
     }
     transaction.commit();
+}
+
+void LuaDB::DeleteSnapshot(const std::string& file)
+{
+    SQLite::Statement remove(m_db, "DELETE FROM Store WHERE savefile = ?");
+    remove.bind(1, file);
+    remove.exec();
 }

@@ -23,6 +23,7 @@ constexpr std::size_t kShutdownSlotRva = 0x02734e80;
 constexpr std::size_t kShutdownRva = 0x01895bb4;
 constexpr std::size_t kScriptSystemVtableRva = 0x027d2488;
 constexpr std::size_t kSaveGameRva = 0x00f12d64;
+constexpr std::size_t kWriteSaveFileRva = 0x00f0f088;
 constexpr std::size_t kSaveHelperVtableRva = 0x026a2dd8;
 constexpr std::size_t kLoadHelperVtableRva = 0x026a2fd0;
 constexpr std::size_t kLuaToStringRva = 0x002b7ee4;
@@ -32,11 +33,14 @@ constexpr char kSnapshotMetadata[] = "kcd1db_snapshot";
 using CompleteInit = bool(*)(void*);
 using Shutdown = void(*)(void*);
 using SaveGame = bool(*)(void*, int, int, const char*);
+using WriteSaveFile = bool(*)(void*, void*, void*, int);
 std::byte* g_gameModule;
 std::unique_ptr<LuaDB> g_db;
 void* g_scriptSystem;
 std::filesystem::path g_root;
 SaveGame g_saveGame;
+WriteSaveFile g_writeSaveFile;
+bool g_saveListenerRegistered;
 
 struct PendingSnapshot
 {
@@ -244,6 +248,8 @@ int access(void* handler, void*, int)
     catch (const std::exception& e)
     {
         log_message("LuaDB call failed", e.what());
+        if constexpr (operation == Access::Get)
+            return 0;
         return end_boolean(handler, false);
     }
 }
@@ -291,36 +297,61 @@ std::string new_snapshot_version()
 
 bool on_save_game(void* manager, int type, int slot, const char* name)
 {
+    if (!g_saveListenerRegistered)
+        return g_saveGame(manager, type, slot, name);
+
     // The save manager serializes to memory before writing the .whs file.
     std::optional<PendingSnapshot> pending;
     const auto previous = std::exchange(g_pendingSnapshot, &pending);
     const bool saved = g_saveGame(manager, type, slot, name);
     g_pendingSnapshot = previous;
+    return saved;
+}
 
-    if (pending)
+bool on_write_save_file(void* manager, void* stream, void* description, int replacementSlot)
+{
+    if (!g_pendingSnapshot)
+        return g_writeSaveFile(manager, stream, description, replacementSlot);
+    if (!*g_pendingSnapshot)
+    {
+        log_message("Save blocked because no snapshot was captured");
+        return false;
+    }
+
+    const auto& pending = **g_pendingSnapshot;
+    try
+    {
+        // Commit the new version before the writer can touch the old .whs.
+        g_db->Save(pending.version, pending.cache);
+    }
+    catch (const std::exception& e)
+    {
+        log_message("Save data write failed", e.what());
+        return false;
+    }
+
+    const bool saved = g_writeSaveFile(manager, stream, description, replacementSlot);
+    try
     {
         if (saved)
         {
-            try
-            {
-                g_db->Save(pending->version, pending->cache);
-                const auto detail = pending->filename + " (" + std::to_string(pending->cache.size()) + " entries)";
-                log_message("Saved snapshot", detail.c_str());
-            }
-            catch (const std::exception& e)
-            {
-                log_message("Save data write failed", e.what());
-            }
+            const auto detail = pending.filename + " (" + std::to_string(pending.cache.size()) + " entries)";
+            log_message("Saved snapshot", detail.c_str());
         }
         else
         {
-            log_message("Discarded snapshot after failed save", pending->filename.c_str());
+            g_db->DiscardSnapshot(pending.version);
+            log_message("Discarded snapshot after failed save", pending.filename.c_str());
         }
+    }
+    catch (const std::exception& e)
+    {
+        log_message(saved ? "Could not log saved snapshot" : "Could not discard unused snapshot", e.what());
     }
     return saved;
 }
 
-bool install_save_hook()
+bool install_save_hooks()
 {
     const auto initialized = MH_Initialize();
     if (initialized != MH_OK)
@@ -329,13 +360,18 @@ bool install_save_hook()
         return false;
     }
 
-    auto* target = g_gameModule + kSaveGameRva;
-    void* original = nullptr;
-    auto status = MH_CreateHook(target, reinterpret_cast<void*>(on_save_game), &original);
+    auto* saveGame = g_gameModule + kSaveGameRva;
+    auto* writeSaveFile = g_gameModule + kWriteSaveFileRva;
+    void* originalSaveGame = nullptr;
+    void* originalWriteSaveFile = nullptr;
+    auto status = MH_CreateHook(saveGame, reinterpret_cast<void*>(on_save_game), &originalSaveGame);
+    if (status == MH_OK)
+        status = MH_CreateHook(writeSaveFile, reinterpret_cast<void*>(on_write_save_file), &originalWriteSaveFile);
     if (status == MH_OK)
     {
-        g_saveGame = reinterpret_cast<SaveGame>(original);
-        status = MH_EnableHook(target);
+        g_saveGame = reinterpret_cast<SaveGame>(originalSaveGame);
+        g_writeSaveFile = reinterpret_cast<WriteSaveFile>(originalWriteSaveFile);
+        status = MH_EnableHook(MH_ALL_HOOKS);
     }
     if (status == MH_OK)
         return true;
@@ -445,7 +481,7 @@ bool on_complete_init(void* framework)
         {
             log_message("Unsupported script system");
         }
-        else if (install_save_hook())
+        else if (install_save_hooks())
         {
             const auto dbPath = (g_root / kDatabaseName).u8string();
             g_db = std::make_unique<LuaDB>(std::string(dbPath.begin(), dbPath.end()));
@@ -453,6 +489,7 @@ bool on_complete_init(void* framework)
             {
                 method<void(*)(void*, FrameworkListener*, const char*, int)>(framework, 0x338)(
                     framework, &g_listener, "kcd1db", 0);
+                g_saveListenerRegistered = true;
                 log_message("LuaDB and DB registered");
             }
             else
@@ -470,6 +507,7 @@ bool on_complete_init(void* framework)
 
 void on_shutdown(void* framework)
 {
+    game_function<Shutdown>(kShutdownRva)(framework);
     if (g_db)
     {
         try
@@ -481,7 +519,6 @@ void on_shutdown(void* framework)
             log_message("Final global flush failed", e.what());
         }
     }
-    game_function<Shutdown>(kShutdownRva)(framework);
 }
 
 bool replace_slot(std::size_t slotRva, std::size_t oldRva, void* hook)

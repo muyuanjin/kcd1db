@@ -21,8 +21,8 @@ db.L.progress = nil  -- Delete the value when saving the next snapshot.
 ```
 
 - `DB.Create("MyMod")` and `DB("MyMod")` create a namespace. Values are encoded as JSON using the game's `Scripts/JSON/json.lua`.
-- `Set`, `Get`, `Del`, `Exi`, and `All` operate on save-local data. The plugin commits a snapshot after a successful game save and restores the snapshot associated with the loaded save version. Keep `kcd1db.db` with your game-save backups if you want to restore their Lua data.
-- `SetG`, `GetG`, `DelG`, `ExiG`, and `AllG` operate on cross-save data. The plugin writes pending changes during game updates and on shutdown.
+- `Set`, `Get`, `Del`, `Exi`, and `All` operate on save-local data. The plugin commits the new version's snapshot before the game writes its save file. If the snapshot cannot be written, the game reports a save failure. Loading a save restores its version's snapshot. If SQLite is temporarily unavailable, the plugin retries the restore on the next save-local access or save attempt. Keep `kcd1db.db` with your game-save backups if you want to restore their Lua data.
+- `SetG`, `GetG`, `DelG`, `ExiG`, and `AllG` operate on cross-save data. The plugin writes pending changes during game updates and after Lua shutdown callbacks.
 - The raw `LuaDB` API uses the same method names and accepts booleans, numbers, and strings. `Set` and `SetG` return `false` for keys or string values containing a NUL byte. `LuaDB.Dump()` logs both caches to `kcd1db.log`.
 - To make the native plugin optional, bundle `kcd1db_fake_db.lua` in your mod. It uses in-memory storage when the native plugin is absent. [Fake DB integration](docs/fake-db.md)
 

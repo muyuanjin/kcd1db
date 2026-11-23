@@ -1,3 +1,27 @@
+--[[
+MIT License
+
+Copyright (c) 2025 muyuanjin
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+]]
+
 local KCD1DB_FAKE_DB_VERSION = "1"
 
 local raw_methods = {
@@ -98,18 +122,27 @@ end
 local function make_fake_luadb()
     local local_store = {}
     local global_store = {}
+    local nul = string.char(0)
 
     local function valid_key(key)
         if type(key) == "string" then
-            return true
+            if not string.find(key, nul, 1, true) then
+                return true
+            end
+            log("WARN", "LuaDB key contains NUL.")
+        else
+            log("WARN", "LuaDB key must be a string; got " .. type(key) .. ".")
         end
-        log("WARN", "LuaDB key must be a string; got " .. type(key) .. ".")
         return false
     end
 
     local function valid_value(value)
         local value_type = type(value)
         if value_type == "boolean" or value_type == "number" or value_type == "string" then
+            if value_type == "string" and string.find(value, nul, 1, true) then
+                log("WARN", "Raw LuaDB string value contains NUL.")
+                return false
+            end
             return true
         end
         log("WARN", "Raw LuaDB value must be boolean, number, or string; got " .. value_type .. ".")
@@ -796,7 +829,9 @@ meta.native = using_native
 meta.fake = not using_native
 meta.persistent = using_native and (_G.LuaDB.__kcd1db_persistent ~= false) or false
 meta.backend = using_native and (_G.LuaDB.__kcd1db_backend or "native-supported") or "memory"
-meta.version = KCD1DB_FAKE_DB_VERSION
+if not using_native then
+    meta.version = KCD1DB_FAKE_DB_VERSION
+end
 meta.fake_db_loaded = KCD1DB_FAKE_DB_VERSION
 
 if not already_loaded or installed_fake or needs_db_wrapper then

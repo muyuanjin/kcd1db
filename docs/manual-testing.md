@@ -78,11 +78,15 @@ try {
 }
 ```
 
-Attempt **Save and Quit**. Steam build `22623230` can crash inside `WHGame.dll` when Windows denies the write, including with the ASI removed. If the save function returns failure, `kcd1db.log` reports `Discarded snapshot after failed save`. If the engine crashes before returning, there is no completion entry. After releasing the lock, check that the original file matches the backup and that no new snapshot was committed. Reload the preserved save and verify that `exitMarker` still has its previously saved value.
+Attempt **Save and Quit**. Steam build `22623230` can crash inside `WHGame.dll` when Windows denies the write, including with the ASI removed. If the save function returns failure, `kcd1db.log` reports `Discarded snapshot after failed save`. If the engine crashes before returning, a snapshot for the attempted save can remain in SQLite. After releasing the lock, check that the original file matches the backup. Reload the preserved save and verify that `exitMarker` still has its previously saved value.
+
+## SQLite write failure
+
+Back up the test playline's `exit.whs` and load it. Change `exitMarker` and use a separate SQLite shell on the game-root `kcd1db.db` to run `BEGIN IMMEDIATE;`. Attempt **Save and Quit** while that transaction is open. The game should report a save failure and `kcd1db.log` should show `Save data write failed`. Check that `exit.whs` still matches the backup. Run `ROLLBACK;` in the SQLite shell and retry the save. The new exit save should restore the updated marker after a restart.
 
 ## Raw Lua string arguments
 
-Run these commands with the native plugin active. The first seeds an ordinary key and verifies that a NUL in either argument prevents the write. The second checks that access through a NUL-containing key cannot read or delete the ordinary key.
+Run these commands with the native plugin and repeat them with the in-memory fallback. The first seeds an ordinary key and verifies that a NUL in either argument prevents the write. The second checks that access through a NUL-containing key cannot read or delete the ordinary key.
 
 ```lua
 #local t = LuaDB; local k = "KCD1DBManualRaw"; local z = string.char(0); assert(t.Set(k, "keep")); assert(t.Set(k .. z .. "suffix", "wrong") == false); assert(t.Set(k, "x" .. z .. "y") == false); assert(t.Get(k) == "keep")
